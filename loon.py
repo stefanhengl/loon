@@ -23,6 +23,9 @@ class Cell(object):
     def __add__(self, other):
         return Cell(self.r + other.r, (self.c + other.c) % C)
 
+    def __str__(self):
+        return "({}, {})".format(self.r, self.c)
+
 class Ballon(object):
     def __init__(self, pos, height=0, target=None, radius=1):
         assert isinstance(pos, Cell)
@@ -33,7 +36,10 @@ class Ballon(object):
         self.lost = False
 
     def covers(self, pos):
-        pass # TODO: IMPLEMENT THIS
+        return ((self.pos.r-pos.r)*2 + (self.columndist(self.pos.c, pos.c)*2)) < self.radius*2
+
+    def columndist(self, c1, c2):
+        return min(abs(c1-c2), C-abs(c1-c2))
 
 def convert_to_cell(cString):
     return Cell(*[int(item) for item in cString.split()])
@@ -140,8 +146,6 @@ def time_travel(current_pos, current_alt, current_step, total_steps, target_row,
             opts.append(-1)
         return opts
 
-
-
     if current_step == total_steps:
         return abs(current_pos.r - target_row)
 
@@ -153,7 +157,7 @@ def time_travel(current_pos, current_alt, current_step, total_steps, target_row,
         new_height = current_alt + opt
         dist = time_travel(new_pos, new_height, current_step +1, total_steps, target_row, wind)
         distances.append(dist)
-    
+ 
     if current_step > 0:
         return min(distances)
     return opts[distances.index(min(distances))]
@@ -163,7 +167,6 @@ def check_coverage(targetCells, ballons):
         for b in ballons:
             if b.covers(t["pos"]):
                 t["coverage"] += 1
-                print "target cell", t, "covered"
                 break
 
 def count_points(targetCells):
