@@ -9,6 +9,7 @@ Ideas:
 
 from collections import Counter
 import random
+import numpy as np
 
 # global variabels
 C = -1
@@ -89,11 +90,11 @@ def play(ballons, wind):
     for ballon in ballons:
         move(ballon, wind, started_balloons)
     
-    print len(started_balloons), 'balloons started'
+    # print len(started_balloons), 'balloons started'
 
 def move(balloon, wind, started_balloons):
     # Ballons on the ground
-    threshold = 0.1
+    threshold = 0.025
     if balloon.height == 0:
         # (1) Spread out ballons by randomzing launch time
         # (2) Make sure two ballons with the same target do not start at the same time
@@ -178,27 +179,37 @@ def count_points(targetCells):
 def create_ballons(B, starting_cell, radius):
     return [Ballon(pos=starting_cell, height=0, radius=radius) for _ in range(B)]
 
-def assign_target_row_to_ballons(ballons, targetCells, R, V): # TODO: OPTIMZE THIS TO BANDS
+def assign_target_row_to_ballons(ballons, targetCells, V): # TODO: OPTIMZE THIS TO BANDS
     upper_limit = (R-V)-1
     lower_limit = V
+    # bands = range(V,70,14)
+    # cnt = Counter([min(bands, key=lambda x:abs(x-targetCell["pos"].r)) for targetCell in targetCells])
     cnt = Counter([targetCell["pos"].r for targetCell in targetCells])
     choices_deep = [[item]*cnt[item] for item in cnt]
     choices_flat = [item for sublist in choices_deep for item in sublist]
     choices_cut = [lower_limit if item < lower_limit else min(item, upper_limit)
-                   for item in choices_flat]
+                    for item in choices_flat]
     for ballon in ballons:
         ballon.target = random.choice(choices_cut)
 
 def main():
     global R, C, A
-    R, C, A, radius, B, T, starting_cell, target_cells, wind = load("loon_r70_c300_a8_radius7_saturation_250.in")
-    balloons = create_ballons(B, starting_cell, radius)
-    assign_target_row_to_ballons(balloons, target_cells, R, radius)
+    reps = 50
+    points = []
+    for j in range(reps):
+        R, C, A, radius, B, T, starting_cell, target_cells, wind = load("loon_r70_c300_a8_radius7_saturation_250.in")
+        balloons = create_ballons(B, starting_cell, radius)
+        assign_target_row_to_ballons(balloons, target_cells, radius)
 
-    for i in range(T):
-        play(balloons, wind)
-        check_coverage(target_cells, balloons)
-        print 'Turn {} Points {}'.format(i, count_points(target_cells))
+        for i in range(T):
+            play(balloons, wind)
+            check_coverage(target_cells, balloons)
+        
+        points.append(count_points(target_cells))
+
+    print points
+    print "mean:", np.mean(points)
+    print "max:", np.max(points)
 
 if __name__ == "__main__":
     main()
