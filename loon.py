@@ -1,18 +1,9 @@
 """Hash Code 2015 Loon
-
-Strategy:
-- Calculate number of targets per row #T(r)
-- Assign each balloon B to a target row r->B such that #B(r) ~ #T(r)
-- Choose change of altitude by checking recursively which change puts
-  the balloon closest to the target row x steps in the future
-
-More Ideas:
-- Change scoring function such that balloons slow down in populated arreas
-  and speed up over the oceans
 """
 
 from collections import Counter
 import csv
+import math
 import os
 import random
 
@@ -52,7 +43,7 @@ class Balloon(object):
 
 class Vector(object):
     """
-    Vector can be added and printed
+    Vectors have a length, can be added, substracted, and printed
     """
 
     def __init__(self, r, c):
@@ -64,6 +55,12 @@ class Vector(object):
 
     def __str__(self):
         return "({}, {})".format(self.r, self.c)
+
+    def __len__(self):
+        return math.sqrt(self.r**2 + self.c**2)
+
+    def __sub__(self, other):
+        return Vector(self.r - other.r, self.c - other.c)
 
 
 def play(balloons, wind):
@@ -115,7 +112,6 @@ def move(balloon, wind, started_balloons):
         balloon.pos, balloon.height, choice, wind)
     if out_of_bounds(balloon.pos):
         balloon.lost = True
-        print "balloon lost"
     balloon.height += choice
 
     return choice
@@ -139,11 +135,11 @@ def time_travel(starting_pos, current_pos, current_alt,
 
     if current_step == total_steps:
         # scoring
-        return score(starting_pos, current_pos, target_row)
+        return scoring(starting_pos, current_pos, target_row)
 
     opts = get_options(current_alt)
-    distances = []
-    # For each option (-1, 0, +1) travel further in time
+    scores = []
+    # For each option (-1, 0, +1) travel further to the future
     for opt in opts:
         vec_for_opt = get_vector_for_alt_change(
             current_pos, current_alt, opt, wind)
@@ -158,26 +154,37 @@ def time_travel(starting_pos, current_pos, current_alt,
             target_row=target_row,
             wind=wind
         )
-        distances.append(dist)
+        scores.append(dist)
 
     if current_step > 0:
-        return min(distances)
-    return opts[distances.index(min(distances))]
+        return max(scores)
+    return opts[scores.index(max(scores))]
 
 
-def score(starting_pos, current_pos, target_row):
+def scoring(starting_pos, current_pos, target_row):
     """
-    Return a scare based on starting position, current position and the assigned target row
+    Return a score based on starting position, current position and the assigned target row
     The lower the score the better.
     """
-    return abs(current_pos.r - target_row)
+    speed = len(starting_pos - current_pos)
+    distance_to_target_row = abs(current_pos.r - target_row)
+    penalty = -10.0 if out_of_bounds(current_pos) else 0
+
+    # alpha > 0: higher speed yields higher scores
+    alpha = 0.01
+    # penalize speed over densly populated areas
+    if 80 < starting_pos.c < 130 or 160 < starting_pos.c < 200:
+        alpha = -1 * alpha
+
+    score = 1.0 / (distance_to_target_row + 1) + alpha * speed + penalty
+    return score
 
 
 def get_vector_for_alt_change(pos, altitude, alt_change, wind):
     """
     Return wind vector for altitude changes depending on the current position and altitude
     """
-    return wind[pos.r - 1][(pos.c - 1) % C][altitude + alt_change]
+    return wind[pos.r - 1][(pos.c - 1) % C][altitude + alt_change - 1]
 
 
 def out_of_bounds(pos):
@@ -304,31 +311,44 @@ def save_moves_to_disk(fle, moves):
 
 def main():
     global R, C, A
-    reps = 80  # run the simulation several times
-    points = []
-    for _ in range(reps):
-        # load data
-        radius, B, T, starting_cell, target_cells, wind = load(
-            "loon_r70_c300_a8_radius7_saturation_250.in")
-        balloons = create_balloons(B, starting_cell, radius)
-        assign_target_row_to_balloons(balloons, target_cells, radius)
+
+    # create output directory if it does not already exist
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), "output")):
+        os.makedirs(os.path.join(os.path.dirname(__file__), "output"))
+
+    reps = 20  # run the simulation several times
+
+    scores = []
+    for rep in range(reps):
+        # clean up
         try:
-            os.remove("./loon.out")
+            os.remove("./output/loon.out")
         except OSError:
             pass
+
+        # load data
+        radius, B, T, starting_cell, target_cells, wind = load(
+            "./input/loon_r70_c300_a8_radius7_saturation_250.in")
+
+        balloons = create_balloons(B, starting_cell, radius)
+        assign_target_row_to_balloons(balloons, target_cells, radius)
 
         # start simulation
         for _ in range(T):
             moves = play(balloons, wind)
             check_coverage(target_cells, balloons)
-            save_moves_to_disk("./loon.out", moves)
+            save_moves_to_disk("./output/loon.out", moves)
+
+        print sum([1 if b.lost else 0 for b in balloons]), "balloons lost"
 
         this_rounds_points = count_points(target_cells)
-        os.rename("./loon.out", "{}.out".format(this_rounds_points))
-        points.append(this_rounds_points)
+        os.rename("./output/loon.out",
+                  "./output/{}.out".format(this_rounds_points))
+        scores.append(this_rounds_points)
 
-    print "mean:", np.mean(points)
-    print "max:", np.max(points)
+    print "Repititions:", reps
+    print "mean:", np.mean(scores)
+    print "max:", np.max(scores)
 
 
 if __name__ == "__main__":

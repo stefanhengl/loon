@@ -6,7 +6,7 @@ from bokeh.plotting import figure, show
 
 # load data
 _, _, _, STARTING_CELL, TARGET_CELLS, WIND = load(
-    "loon_r70_c300_a8_radius7_saturation_250.in")
+    "./input/loon_r70_c300_a8_radius7_saturation_250.in")
 
 # prepare data
 ROWS = [cell["pos"].r for cell in TARGET_CELLS]
