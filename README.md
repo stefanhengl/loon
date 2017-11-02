@@ -4,18 +4,16 @@
 [Click here](https://hashcode.withgoogle.com/past_editions.html) or check the downloaded assets in folder ./input.
 
 ## Strategy:
-- Assign balloons to target rows proportionally to the number of targets in that row
 - Balloons optimize their path to ...
-    - minimize distance to their target row
-    - maximize speed over the oceans, minimize speed over densly populated areas
-    - avoid paths that might cause the balloon the get lost
-- Start balloons randomly, but do not start two balloons with the same target row at the same time
+    - minimize their distance to an assigned **target row**
+    - maximize their speed over the oceans, minimize their speed over densly populated areas
+    - avoid paths that might cause the balloon to get lost
+- Balloons start as soon as their coverage does not overlap with the coverage of their direct predecessor with the same target row
+- A greedy algorithm finds a list of target rows for the balloons: one balloon is added at a time and for this balloon the target row with the highest score is determined.
 
-## Performance:
+## Score:
 The maximum achievable score is upper bounded by full-coverage for every move.
-With 1050 targets and 400 time steps, the upper bound is 420.000 points. The code uses randomness to assign balloons to target rows and to decide whether to start a balloon. Hence, the results are 
-non-deterministic. That being said, the code achieves scores around 380.000 points, which corresponds to **90% coverage**.
+With 1050 targets and 400 time steps, the upper bound is 420.000 points. The code achieves a score of 225.992 points, which corresponds to **54% coverage**.
 
 ## Output:
-Each simulation generates an output file *.out in ./output
-with the score of the simulation as its filename.
+Each simulation generates an output file *.out in ./output with the score of the simulation as its filename.

@@ -1,13 +1,9 @@
 """Hash Code 2015 Loon
 """
-
-from collections import Counter
+from __future__ import division
 import csv
 import math
 import os
-import random
-
-import numpy as np
 
 # global variabels
 C = -1  # Columns
@@ -32,13 +28,14 @@ class Balloon(object):
         """
         Returns True if "pos" is covered by the balloon
         """
-        return ((self.pos.r - pos.r) * 2 + (self._columndist(self.pos.c, pos.c) * 2)) < self.radius * 2
+        return ((self.pos.r - pos.r) ** 2 + (columndist(self.pos.c, pos.c) ** 2)) < self.radius ** 2
 
-    def _columndist(self, c_1, c_2):
-        """
-        Utility function for "covers"
-        """
-        return min(abs(c_1 - c_2), C - abs(c_1 - c_2))
+
+def columndist(c_1, c_2):
+    """
+    Utility function for "covers"
+    """
+    return min(abs(c_1 - c_2), C - abs(c_1 - c_2))
 
 
 class Vector(object):
@@ -60,37 +57,43 @@ class Vector(object):
         return math.sqrt(self.r**2 + self.c**2)
 
     def __sub__(self, other):
-        return Vector(self.r - other.r, self.c - other.c)
+        return Vector(self.r - other.r, columndist(self.c, other.c))
 
 
-def play(balloons, wind):
+def play(balloons, wind, last_started_balloons):
     """
     play represents one turn in the game
     """
-    started_balloons = set()
     moves = []
     for balloon in balloons:
-        this_move = move(balloon, wind, started_balloons)
+        this_move = move(balloon, wind, last_started_balloons)
         moves.append(this_move)
     return moves
 
 
-def move(balloon, wind, started_balloons):
+def move(balloon, wind, last_started_balloons):
     """
     move returns the next altitude change for "balloon" based on the wind pattern and its
     assigned target row.
     """
     # Balloons on the ground
-    threshold = 0.025
     if balloon.height == 0:
         # (1) Spread out balloons by randomzing launch time
         # (2) Make sure two balloons with the same target do not start at the same time
-        if random.random() <= threshold and not balloon.target in started_balloons:
+        try:
+            last_balloon = last_started_balloons[balloon.target]
+            if len(last_balloon.pos - balloon.pos) > 2 * balloon.radius:
+                balloon.pos += wind[balloon.pos.r - 1][balloon.pos.c - 1][1]
+                balloon.height = 1
+                last_started_balloons[balloon.target] = balloon
+                return 1
+            else:
+                return 0
+        except KeyError:
             balloon.pos += wind[balloon.pos.r - 1][balloon.pos.c - 1][1]
             balloon.height = 1
-            started_balloons.add(balloon.target)
-            return 1  # balloon starts
-        return 0  # balloon stays on the ground
+            last_started_balloons[balloon.target] = balloon
+            return 1
 
     # Flying balloons:
     if balloon.lost:
@@ -102,7 +105,7 @@ def move(balloon, wind, started_balloons):
         current_pos=balloon.pos,
         current_alt=balloon.height,
         current_step=0,
-        total_steps=2,
+        total_steps=3,
         target_row=balloon.target,
         wind=wind,
     )
@@ -168,15 +171,15 @@ def scoring(starting_pos, current_pos, target_row):
     """
     speed = len(starting_pos - current_pos)
     distance_to_target_row = abs(current_pos.r - target_row)
-    penalty = -10.0 if out_of_bounds(current_pos) else 0
+    penalty = -10 if out_of_bounds(current_pos) else 0
 
     # alpha > 0: higher speed yields higher scores
-    alpha = 0.01
+    alpha = 0.03
     # penalize speed over densly populated areas
     if 80 < starting_pos.c < 130 or 160 < starting_pos.c < 200:
         alpha = -1 * alpha
 
-    score = 1.0 / (distance_to_target_row + 1) + alpha * speed + penalty
+    score = 3.0 / (distance_to_target_row + 1) + alpha * speed + penalty
     return score
 
 
@@ -278,28 +281,6 @@ def create_balloons(number_of_balloons, starting_cell, radius):
     return [Balloon(pos=starting_cell, height=0, radius=radius) for _ in range(number_of_balloons)]
 
 
-def assign_target_row_to_balloons(balloons, target_cells, radius):
-    """
-    Balloons are assigned to target rows proportionally to the population density per row.
-    """
-    use_bands = True
-    upper_limit = (R - radius) - 1
-    lower_limit = radius
-    if use_bands:
-        bands = range(radius, 70, 14)
-        cnt = Counter([min(bands, key=lambda x: abs(x - target_cell["pos"].r))
-                       for target_cell in target_cells])
-    else:
-        cnt = Counter([targetCell["pos"].r for targetCell in target_cells])
-
-    choices_deep = [[item] * cnt[item] for item in cnt]
-    choices_flat = [item for sublist in choices_deep for item in sublist]
-    choices_cut = [lower_limit if item < lower_limit else min(item, upper_limit)
-                   for item in choices_flat]
-    for balloon in balloons:
-        balloon.target = random.choice(choices_cut)
-
-
 def save_moves_to_disk(fle, moves):
     """
     Appends lines like "0 1 0 0 0 -1 0 0 ..... 0" to file "fle"
@@ -309,47 +290,85 @@ def save_moves_to_disk(fle, moves):
         writer.writerow(moves)
 
 
-def main():
-    global R, C, A
+def reset_target_cells(target_cells):
+    """
+    Resets coverage of all target cells to 0
+    """
+    return [{"pos": tc["pos"], "coverage":0} for tc in target_cells]
 
+
+def main():
+    """
+    Greedy algorithm. We add one balloon at a time and determine an optimal target row for each 
+    new balloon.
+    """
+
+    # load data
+    radius, B, T, starting_cell, target_cells, wind = load(
+        "./input/loon_r70_c300_a8_radius7_saturation_250.in")
+
+    target_rows = []
+    # add one balloon at a time until we have B balloons
+    while len(target_rows) < B:
+        scores = {}
+        for i in range(65, 30, -1):
+
+            target_cells = reset_target_cells(target_cells)
+
+            # add balloon
+            balloons = create_balloons(
+                1 + len(target_rows), starting_cell, radius)
+            balloons[0].target = i
+            for j, balloon in enumerate(balloons[1:]):
+                balloon.target = target_rows[j]
+
+            last_started_balloons = {}
+            print "simulating with", len(balloons), "balloons"
+            print "target rows", [bal.target for bal in balloons]
+
+            # simulation
+            for _ in range(T):
+                play(balloons, wind, last_started_balloons)
+                check_coverage(target_cells, balloons)
+
+            # save results
+            this_rounds_points = count_points(target_cells)
+            print "points", this_rounds_points
+            scores.setdefault(this_rounds_points, []).append(i)
+
+        target_rows.append(max(scores[max(scores)]))
+        print target_rows, max(scores)
+
+    # At this point, the greedy algorithm determined a set of target rows The
+    # next step is to run the full simulation with the this set and to save the each
+    # move to disk.
+    target_cells = reset_target_cells(target_cells)
+
+    balloons = create_balloons(B, starting_cell, radius)
+    for i, balloon in enumerate(balloons):
+        balloon.target = target_rows[i]
+
+    last_started_balloons = {}
+    try:
+        os.remove("./output/loon.out")
+    except OSError:
+        pass
+
+    # simulation
+    for _ in range(T):
+        moves = play(balloons, wind, last_started_balloons)
+        check_coverage(target_cells, balloons)
+        # save moves to file
+        save_moves_to_disk("./output/loon.out", moves)
+
+    # rename output file
+    points = count_points(target_cells)
+    os.rename("./output/loon.out", "./output/loon_{}.out".format(points))
+
+
+if __name__ == "__main__":
     # create output directory if it does not already exist
     if not os.path.isdir(os.path.join(os.path.dirname(__file__), "output")):
         os.makedirs(os.path.join(os.path.dirname(__file__), "output"))
 
-    reps = 20  # run the simulation several times
-
-    scores = []
-    for rep in range(reps):
-        # clean up
-        try:
-            os.remove("./output/loon.out")
-        except OSError:
-            pass
-
-        # load data
-        radius, B, T, starting_cell, target_cells, wind = load(
-            "./input/loon_r70_c300_a8_radius7_saturation_250.in")
-
-        balloons = create_balloons(B, starting_cell, radius)
-        assign_target_row_to_balloons(balloons, target_cells, radius)
-
-        # start simulation
-        for _ in range(T):
-            moves = play(balloons, wind)
-            check_coverage(target_cells, balloons)
-            save_moves_to_disk("./output/loon.out", moves)
-
-        print sum([1 if b.lost else 0 for b in balloons]), "balloons lost"
-
-        this_rounds_points = count_points(target_cells)
-        os.rename("./output/loon.out",
-                  "./output/{}.out".format(this_rounds_points))
-        scores.append(this_rounds_points)
-
-    print "Repititions:", reps
-    print "mean:", np.mean(scores)
-    print "max:", np.max(scores)
-
-
-if __name__ == "__main__":
     main()
