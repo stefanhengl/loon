@@ -1,5 +1,8 @@
 """
 vislualize shows all targets and the starting point in a scatter plot
+
+usage:
+python plot_targets.py
 """
 from loon import load
 from bokeh.plotting import figure, show
